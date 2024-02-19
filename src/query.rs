@@ -1,6 +1,6 @@
 use rusqlite::{Connection, OptionalExtension, Transaction};
 use serde::{de::DeserializeOwned, Serialize};
-use serde_rusqlite::{columns_from_statement, from_row_with_columns, to_params};
+use serde_rusqlite::{columns_from_statement, from_row_with_columns, to_params, to_params_named};
 
 /// Execute the given INSERT query against the given transaction with the given parameters.
 pub fn execute_with_params<T: Serialize>(
@@ -11,6 +11,22 @@ pub fn execute_with_params<T: Serialize>(
     let mut statement = transaction.prepare_cached(query)?;
     let modified = statement.execute(
         to_params(params).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?,
+    )?;
+    Ok(modified)
+}
+
+/// Execute the given INSERT query against the given transaction with the given parameters.
+pub fn execute_with_params_named<T: Serialize>(
+    query: &str,
+    transaction: &Transaction,
+    params: &T,
+) -> Result<usize, rusqlite::Error> {
+    let mut statement = transaction.prepare_cached(query)?;
+    let modified = statement.execute(
+        to_params_named(params)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
+            .to_slice()
+            .as_slice(),
     )?;
     Ok(modified)
 }
@@ -26,6 +42,35 @@ pub fn query_with_params<Input: Serialize, Output: DeserializeOwned>(
     let result = statement
         .query_and_then(
             to_params(params).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?,
+            // TODO: Proper error
+            |row| {
+                from_row_with_columns(row, &columns).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Null,
+                        Box::new(e),
+                    )
+                })
+            },
+        )?
+        .collect::<Result<Vec<Output>, rusqlite::Error>>()?;
+    Ok(result)
+}
+
+/// Execute the given SELECT query against the given transaction with the given parameters, returning the result.
+pub fn query_with_params_named<Input: Serialize, Output: DeserializeOwned>(
+    query: &str,
+    connection: &Connection,
+    params: &Input,
+) -> Result<Vec<Output>, rusqlite::Error> {
+    let mut statement = connection.prepare_cached(query)?;
+    let columns = columns_from_statement(&statement);
+    let result = statement
+        .query_and_then(
+            to_params_named(params)
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
+                .to_slice()
+                .as_slice(),
             // TODO: Proper error
             |row| {
                 from_row_with_columns(row, &columns).map_err(|e| {
@@ -92,6 +137,35 @@ pub fn query_optional_with_params<Input: Serialize, Output: DeserializeOwned>(
     Ok(result)
 }
 
+/// Execute the given query and return the result, which can be at most one row.
+pub fn query_optional_with_params_named<Input: Serialize, Output: DeserializeOwned>(
+    query: &str,
+    connection: &Connection,
+    params: &Input,
+) -> Result<Option<Output>, rusqlite::Error> {
+    let mut statement = connection.prepare_cached(query)?;
+    let columns = columns_from_statement(&statement);
+    let result = statement
+        .query_row(
+            to_params_named(params)
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
+                .to_slice()
+                .as_slice(),
+            // TODO: Proper error
+            |row| {
+                from_row_with_columns(row, &columns).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Null,
+                        Box::new(e),
+                    )
+                })
+            },
+        )
+        .optional()?;
+    Ok(result)
+}
+
 /// Run a query which should return exactly one row (with the given parameters)
 pub fn query_single_with_params<Input: Serialize, Output: DeserializeOwned>(
     query: &str,
@@ -99,6 +173,19 @@ pub fn query_single_with_params<Input: Serialize, Output: DeserializeOwned>(
     params: &Input,
 ) -> Result<Output, rusqlite::Error> {
     match query_optional_with_params(query, connection, params) {
+        Ok(Some(row)) => Ok(row),
+        Ok(None) => Err(rusqlite::Error::QueryReturnedNoRows),
+        Err(e) => Err(e),
+    }
+}
+
+/// Run a query which should return exactly one row (with the given parameters)
+pub fn query_single_with_params_named<Input: Serialize, Output: DeserializeOwned>(
+    query: &str,
+    connection: &Connection,
+    params: &Input,
+) -> Result<Output, rusqlite::Error> {
+    match query_optional_with_params_named(query, connection, params) {
         Ok(Some(row)) => Ok(row),
         Ok(None) => Err(rusqlite::Error::QueryReturnedNoRows),
         Err(e) => Err(e),

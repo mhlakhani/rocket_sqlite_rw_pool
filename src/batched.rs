@@ -47,7 +47,6 @@ impl BatchedBulkValuesClause {
         Self::serialize_into(&mut self.pre_params, params)
     }
 
-    
     /// Binds params to come after the rows to be inserted. Useful when the query has
     /// some fixed parameters
     pub fn bind_post<T: Serialize>(&mut self, params: &T) -> Result<()> {

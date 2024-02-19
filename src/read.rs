@@ -22,7 +22,6 @@ impl<DB> From<ConnectionHolder> for ReadConnection<DB> {
 }
 
 impl<DB: 'static> ReadConnection<DB> {
-
     /// Run the provided function against the connection
     #[inline]
     pub async fn run<F, R>(&self, f: F) -> R

@@ -17,7 +17,6 @@ pub struct AuthorizedConnector<'pool, DB> {
 }
 
 impl<'pool, DB: 'static> AuthorizedConnector<'pool, DB> {
-
     /// Get a read-only connection from the pool.
     pub async fn read(&self) -> Result<ReadConnection<DB>> {
         self.pool.get_read().await

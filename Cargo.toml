@@ -1,6 +1,6 @@
 [package]
 name = "rocket_sqlite_rw_pool"
-version = "0.0.1-alpha1"
+version = "0.0.1-alpha2"
 edition = "2021"
 authors = ["Hasnain Lakhani <m.hasnain.lakhani@gmail.com>"]
 categories = ["web-programming"]
